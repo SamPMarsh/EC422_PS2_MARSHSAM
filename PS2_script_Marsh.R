@@ -75,6 +75,14 @@ unemp_top_decreases_no_covid <- unemp_no_covid |>
 
 ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
   geom_line() + 
+  labs(title = "Regional Unemployment Rates Over Time",
+       x = "Date",
+       y = "Unemployment Rate") +
+  theme_minimal()
+
+
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() + 
   facet_wrap(~region) +
   labs(title = "Regional Unemployment Rates Over Time",
        x = "Date",
@@ -82,9 +90,13 @@ ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
   theme_minimal() +
   theme(legend.position = "none")
 
-
-
-
+ggplot(unemp_summary, aes(x = fct_reorder(region, mean_rate), y = mean_rate)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Average Unemployment Rate by Region",
+    x = "Region",
+    y = "Mean Unemployment Rate (%)") +
+  theme_minimal()
 
 
 
