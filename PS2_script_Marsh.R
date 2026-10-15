@@ -71,7 +71,25 @@ unemp_top_increases_no_covid <- unemp_no_covid |>
 unemp_top_decreases_no_covid <- unemp_no_covid |>
   slice_min(unemployment_rate_change, n = 5)
 
-unemp_top_increases
+# moving onto visualization
+
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() + 
+  facet_wrap(~region) +
+  labs(title = "Regional Unemployment Rates Over Time",
+       x = "Date",
+       y = "Unemployment Rate") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
+
+
+
+
+
+
+
 
 
 
