@@ -56,6 +56,14 @@ unemp_summary <- unemp |>
     max_rate  = max(unemployment_rate,  na.rm = TRUE)
   )
 
+unemp_recent_summary <- unemp_recent |>
+  group_by(region) |>
+  summarize(
+    mean_rate = mean(unemployment_rate, na.rm = TRUE),
+    min_rate  = min(unemployment_rate,  na.rm = TRUE),
+    max_rate  = max(unemployment_rate,  na.rm = TRUE)
+  )
+
 unemp_top_increases <- unemp |>
   slice_max(unemployment_rate_change, n = 5)
 
@@ -90,17 +98,29 @@ ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
   theme_minimal() +
   theme(legend.position = "none")
 
+
 ggplot(unemp_summary, aes(x = fct_reorder(region, mean_rate), y = mean_rate)) +
   geom_col(fill = "steelblue") +
   labs(
     title = "Average Unemployment Rate by Region",
     x = "Region",
-    y = "Mean Unemployment Rate (%)") +
+    y = "Mean Unemployment Rate (%)",
+    caption = "Source: FRED, January 1976 to present"
+  ) +
   theme_minimal()
 
+# I'm going to plot recent unemployment rates since 2015 to see covid related changes. I'll make a line on the plot to indiciate the april 2020 covid timeperiod.
 
-
-
+ggplot(unemp_recent, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line(linewidth = 0.8) +
+  geom_vline(xintercept = as.Date("2020-04-01"), linetype = "dashed") +
+  labs(
+    title = "Unemployment Rates Since 2015 April 2020 Marked",
+    x = "Date",
+    y = "Unemployment Rate (%)",
+    color = "Region"
+  ) +
+  theme_minimal()
 
 
 

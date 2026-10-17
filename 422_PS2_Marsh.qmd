@@ -1,0 +1,229 @@
+---
+title: "PS2_Writeup_Marsh"
+author: "Samuel Marsh"
+date: today
+format:
+  html:
+    toc: true
+    embed-resources: true
+---
+
+## PS2 MARSH
+
+[**https://github.com/SamPMarsh/EC422_PS2_MARSHSAM.git**](https://github.com/SamPMarsh/EC422_PS2_MARSHSAM.git)
+
+## Data
+
+```{r}
+library(tidyquant)
+library(tidyverse)
+library(knitr)
+
+# unemp_raw <- tq_get(
+#   c("UNRATE", "ORUR", "CAUR", "TXUR", "NYUR"),
+#   get = "economic.data",
+#   from = "1976-01-01"
+# )
+# 
+# head(unemp_raw)
+# 
+# dir.create("data", showWarnings = FALSE)
+# 
+# write_rds(unemp_raw, "data/unemp_raw.rds")
+
+unemp_raw <- read_rds("data/unemp_raw.rds")
+
+unemp <- unemp_raw |>
+  rename(unemployment_rate = price) |>
+  mutate(
+    region = case_when(
+      symbol == "UNRATE" ~ "United States",
+      symbol == "ORUR"    ~ "Oregon",
+      symbol == "CAUR"    ~ "California",
+      symbol == "TXUR"    ~ "Texas",
+      symbol == "NYUR"    ~ "New York"
+    )
+  )
+
+unemp <- unemp |>
+  arrange(region, date) |>
+  group_by(region) |>
+  mutate(
+    unemployment_rate = replace(
+      unemployment_rate,
+      date == as.Date("2025-10-01"),
+      unemployment_rate[date == as.Date("2025-09-01")]
+    )
+  ) |>
+  ungroup()
+
+unemp <- unemp |>
+  arrange(region, date) |>
+  group_by(region) |>
+  mutate(unemployment_rate_change = unemployment_rate - lag(unemployment_rate)) |>
+  ungroup()
+
+unemp_recent <- unemp |>
+  filter(date >= as.Date("2015-01-01"))
+
+unemp_summary <- unemp |>
+  group_by(region) |>
+  summarize(
+    mean_rate = mean(unemployment_rate, na.rm = TRUE),
+    min_rate  = min(unemployment_rate,  na.rm = TRUE),
+    max_rate  = max(unemployment_rate,  na.rm = TRUE)
+  )
+
+unemp_recent_summary <- unemp_recent |>
+  group_by(region) |>
+  summarize(
+    mean_rate = mean(unemployment_rate, na.rm = TRUE),
+    min_rate  = min(unemployment_rate,  na.rm = TRUE),
+    max_rate  = max(unemployment_rate,  na.rm = TRUE)
+  )
+
+
+unemp_top_increases <- unemp |>
+  slice_max(unemployment_rate_change, n = 5)
+
+unemp_top_decreases <- unemp |>
+  slice_min(unemployment_rate_change, n = 5)
+
+unemp_no_covid <- unemp |>
+  filter(year(date) != 2020)
+
+unemp_top_increases_no_covid <- unemp_no_covid |>
+  slice_max(unemployment_rate_change, n = 5)
+
+unemp_top_decreases_no_covid <- unemp_no_covid |>
+  slice_min(unemployment_rate_change, n = 5)
+```
+
+The data is FRED research data of unemployment rates. We've gone from that database and pulled monthly data from several states, including California, Oregon, Texas, New York, and the United States as a whole. We've then added several categories to the data, including the top increases and decreases, as well as removing COVID and pulling only recent data. We have also cleaned up our data somewhat, taking out a government shutdown month to ensure continuity.
+
+```{r}
+#| label: read-data
+#| echo: false
+head(unemp_raw)
+```
+
+## Wrangling
+
+First I summarized statistics by region
+
+```{r}
+#| label: tbl-summary
+unemp_summary |>
+  kable(
+    digits = 2,
+    col.names = c("Region", "Mean rate (%)", "Min rate (%)", "Max rate (%)"),
+    caption = "Mean, minimum, and maximum unemployment rate by region over the full sample."
+  )
+```
+
+```{r}
+#| label: tbl-recent-summary
+unemp_recent_summary |>
+  kable(
+    digits = 2,
+    col.names = c("Region", "Mean rate (%)", "Min rate (%)", "Max rate (%)"),
+    caption = "Mean, minimum, and maximum unemployment rate by region, January 2015 onward."
+  )
+```
+
+Second, showing top increases/decreases leaving out the extraneous covid variables, so results arent skewed.
+
+```{r}
+#| label: tbl-increases
+unemp_top_increases_no_covid |>
+  select(region, date, unemployment_rate, unemployment_rate_change) |>
+  kable(
+    digits = 2,
+    col.names = c("Region", "Month", "Rate (%)", "Change (pct. pts.)"),
+    caption = "Largest month-over-month increases in the unemployment rate, excluding 2020."
+  )
+```
+
+```{r}
+#| label: tbl-decreases
+unemp_top_decreases_no_covid |>
+  select(region, date, unemployment_rate, unemployment_rate_change) |>
+  kable(
+    digits = 2,
+    col.names = c("Region", "Month", "Rate (%)", "Change (pct. pts.)"),
+    caption = "Largest month-over-month decreases in the unemployment rate, excluding 2020."
+  )
+```
+
+## Visualization
+
+Unemployment Rates over Time by Region
+
+```{r}
+#| label: fig-lines
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() +
+  labs(
+    title = "Regional Unemployment Rates Over Time",
+    x = "Date",
+    y = "Unemployment Rate (%)",
+    color = "Region",
+    caption = "Source: FRED"
+  ) +
+  theme_minimal()
+```
+
+Unemployment Rates by Region
+
+```{r}
+#| label: fig-facet
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() +
+  facet_wrap(~ region) +
+  labs(
+    title = "Regional Unemployment Rates Over Time",
+    x = "Date",
+    y = "Unemployment Rate (%)",
+    caption = "Source: FRED"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Average Unemployment Rates demised by region
+
+```{r}
+#| label: fig-bar
+ggplot(unemp_summary, aes(x = fct_reorder(region, mean_rate), y = mean_rate)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Average Unemployment Rate by Region",
+    x = "Region",
+    y = "Mean Unemployment Rate (%)",
+    caption = "Source: FRED, January 1976 to present"
+  ) +
+  theme_minimal()
+```
+
+Recent Unemployment Rates with COVID Marked
+
+```{r}
+#| label: fig-choice
+ggplot(unemp_recent, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line(linewidth = 0.8) +
+  geom_vline(xintercept = as.Date("2020-04-01"), linetype = "dashed") +
+  labs(
+    title = "Unemployment Rates Since 2015, April 2020 Marked",
+    x = "Date",
+    y = "Unemployment Rate (%)",
+    color = "Region",
+    caption = "Source: FRED. Dashed line marks April 2020."
+  ) +
+  theme_minimal()
+```
+
+I chose to represent recent unemployment rates in recent history, including the spike in April of 2020 labeled. I think that it's interesting to see the significance of the shock compared across the different states.
+
+## Reflection
+
+Reflecting, ggplot was easily the coolest part of this project. Between commits I spent some time playing with the scaling and the colors of graphs. I had some previous experience with this so it wasn't hard but I had a good time doing it. The hardest was the logistical side making sure that data was recognized appropriately. I ended up having to utilize some AI help to solve errors that cascaded, such as libraries not yet existing or improper rendering errors. Utilizing AI auto fill has become more natural to me now, and I fully understand what you said in class about how its actually a lot easier but takes some getting used to. Additionally, the use of quarto is very neat. In other classes I had been using .rmd files, which were cool but were not nearly as intuitive as quarto has become going forward.

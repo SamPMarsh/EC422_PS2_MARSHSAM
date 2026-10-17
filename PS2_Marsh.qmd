@@ -1,0 +1,217 @@
+---
+title: "EC422 Problem Set 2: Regional Unemployment"
+author: "Samuel Marsh"
+date: today
+format:
+  html:
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(tidyverse)
+library(knitr)
+
+# Read in the saved data (originally pulled with tidyquant::tq_get)
+unemp_raw <- read_rds("data/unemp_raw.rds")
+
+# Rename and label regions
+unemp <- unemp_raw |>
+  rename(unemployment_rate = price) |>
+  mutate(
+    region = case_when(
+      symbol == "UNRATE" ~ "United States",
+      symbol == "ORUR"   ~ "Oregon",
+      symbol == "CAUR"   ~ "California",
+      symbol == "TXUR"   ~ "Texas",
+      symbol == "NYUR"   ~ "New York"
+    )
+  )
+
+# Month-over-month change within each region
+unemp <- unemp |>
+  arrange(region, date) |>
+  group_by(region) |>
+  mutate(unemployment_rate_change = unemployment_rate - lag(unemployment_rate)) |>
+  ungroup()
+
+# Recent sample: January 2015 onward
+unemp_recent <- unemp |>
+  filter(date >= as.Date("2015-01-01"))
+
+# Summary tables
+unemp_summary <- unemp |>
+  group_by(region) |>
+  summarize(
+    mean_rate = mean(unemployment_rate, na.rm = TRUE),
+    min_rate  = min(unemployment_rate,  na.rm = TRUE),
+    max_rate  = max(unemployment_rate,  na.rm = TRUE)
+  )
+
+unemp_recent_summary <- unemp_recent |>
+  group_by(region) |>
+  summarize(
+    mean_rate = mean(unemployment_rate, na.rm = TRUE),
+    min_rate  = min(unemployment_rate,  na.rm = TRUE),
+    max_rate  = max(unemployment_rate,  na.rm = TRUE)
+  )
+
+# Largest monthly changes, full sample
+unemp_top_increases <- unemp |> slice_max(unemployment_rate_change, n = 5)
+unemp_top_decreases <- unemp |> slice_min(unemployment_rate_change, n = 5)
+
+# Largest monthly changes, excluding 2020
+unemp_no_covid <- unemp |> filter(year(date) != 2020)
+
+unemp_top_increases_no_covid <- unemp_no_covid |>
+  slice_max(unemployment_rate_change, n = 5)
+
+unemp_top_decreases_no_covid <- unemp_no_covid |>
+  slice_min(unemployment_rate_change, n = 5)
+```
+
+# 1. Data
+
+This analysis uses monthly unemployment rates from the Federal Reserve Bank of St. Louis' FRED database (underlying data from the U.S. Bureau of Labor Statistics), downloaded with the `tidyquant` package. It covers five regions: the United States (`UNRATE`), Oregon (`ORUR`), California (`CAUR`), Texas (`TXUR`), and New York (`NYUR`). The data runs from `r format(min(unemp$date), "%B %Y")` to `r format(max(unemp$date), "%B %Y")` and contains `r nrow(unemp)` region-month observations. Each row is one region in one month, with the series code (`symbol`), the `date`, and the unemployment rate in percent (`price` in the raw download, renamed `unemployment_rate`).
+
+```{r}
+#| label: read-data
+#| echo: false
+head(unemp_raw) |>
+  kable(caption = "First six rows of the raw data as downloaded from FRED.")
+```
+
+# 2. Wrangling
+
+I renamed the value column to `unemployment_rate`, added a `region` label for each series code, and computed the month-over-month change in the rate within each region (`unemployment_rate_change`, in percentage points).
+
+## Summary statistics by region
+
+```{r}
+#| label: tbl-summary
+unemp_summary |>
+  kable(
+    digits = 2,
+    col.names = c("Region", "Mean rate (%)", "Min rate (%)", "Max rate (%)"),
+    caption = "Mean, minimum, and maximum unemployment rate by region over the full sample."
+  )
+```
+
+```{r}
+#| label: tbl-recent-summary
+unemp_recent_summary |>
+  kable(
+    digits = 2,
+    col.names = c("Region", "Mean rate (%)", "Min rate (%)", "Max rate (%)"),
+    caption = "Mean, minimum, and maximum unemployment rate by region, January 2015 onward."
+  )
+```
+
+## Largest monthly changes, excluding 2020
+
+I excluded all of 2020 so the extreme COVID-19 swings do not dominate the results. The month-over-month changes were computed on the full data before dropping 2020, so the first month after the gap is still measured against the true prior month. Ties are kept, so a table can have more than five rows.
+
+```{r}
+#| label: tbl-increases
+unemp_top_increases_no_covid |>
+  select(region, date, unemployment_rate, unemployment_rate_change) |>
+  kable(
+    digits = 2,
+    col.names = c("Region", "Month", "Rate (%)", "Change (pct. pts.)"),
+    caption = "Largest month-over-month increases in the unemployment rate, excluding 2020."
+  )
+```
+
+```{r}
+#| label: tbl-decreases
+unemp_top_decreases_no_covid |>
+  select(region, date, unemployment_rate, unemployment_rate_change) |>
+  kable(
+    digits = 2,
+    col.names = c("Region", "Month", "Rate (%)", "Change (pct. pts.)"),
+    caption = "Largest month-over-month decreases in the unemployment rate, excluding 2020."
+  )
+```
+
+# 3. Visualization
+
+## Unemployment rates over time
+
+```{r}
+#| label: fig-lines
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() +
+  labs(
+    title = "Regional Unemployment Rates Over Time",
+    x = "Date",
+    y = "Unemployment Rate (%)",
+    color = "Region",
+    caption = "Source: FRED"
+  ) +
+  theme_minimal()
+```
+
+The figure shows the monthly unemployment rate for all five regions on one set of axes.
+
+## Unemployment rates by region (faceted)
+
+```{r}
+#| label: fig-facet
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() +
+  facet_wrap(~ region) +
+  labs(
+    title = "Regional Unemployment Rates Over Time",
+    x = "Date",
+    y = "Unemployment Rate (%)",
+    caption = "Source: FRED"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+The same data as above, with a separate panel for each region so each region's path is easier to read.
+
+## Average unemployment rate by region
+
+```{r}
+#| label: fig-bar
+ggplot(unemp_summary, aes(x = fct_reorder(region, mean_rate), y = mean_rate)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Average Unemployment Rate by Region",
+    x = "Region",
+    y = "Mean Unemployment Rate (%)",
+    caption = "Source: FRED, January 1976 to present"
+  ) +
+  theme_minimal()
+```
+
+Bars show each region's mean unemployment rate over the full sample, ordered from lowest to highest.
+
+## Unemployment since 2015 with COVID marked
+
+```{r}
+#| label: fig-choice
+ggplot(unemp_recent, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line(linewidth = 0.8) +
+  geom_vline(xintercept = as.Date("2020-04-01"), linetype = "dashed") +
+  labs(
+    title = "Unemployment Rates Since 2015, April 2020 Marked",
+    x = "Date",
+    y = "Unemployment Rate (%)",
+    color = "Region",
+    caption = "Source: FRED. Dashed line marks April 2020."
+  ) +
+  theme_minimal()
+```
+
+I plotted unemployment rates since 2015 to look at COVID-related changes, with a dashed line at April 2020, when rates peaked. [EDIT: add one sentence about what you actually see, such as which regions spiked highest and how quickly they recovered.]
+
+# 4. Reflection
+
+[EDIT THIS IN YOUR OWN WORDS, 4 to 6 sentences.] Pulling the data and computing summaries with `group_by()` and `summarize()` was fairly straightforward once I understood how each step builds on the last. My first errors came from running code before loading `tidyverse`, which made `mutate()` and `write_rds()` "not found," and from renaming a column that did not exist (the FRED value column is called `price`). Another stumbling block was that plots ran without errors but did not show up, which turned out to be a display and pane issue rather than a code problem. I also had to be careful that `lag()` only works correctly after sorting and grouping by region. One thing I feel more comfortable with now is [EDIT: your own example from R, Git, GitHub, or Quarto].
